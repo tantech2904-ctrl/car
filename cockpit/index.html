@@ -1,0 +1,126 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>JARVIS // Autonomous Vehicle Control Cockpit</title>
+  
+  <!-- Modern Technical Typography -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;800&family=Orbitron:wght@500;700;900&family=Rajdhani:wght@600;700&display=swap" rel="stylesheet">
+  
+  <!-- Master HUD Stylesheet -->
+  <link rel="stylesheet" href="./styles/hud.css">
+
+  <!-- ES Module Import Map (Embedded 100% Offline Three.js) -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "./vendor/three.module.js",
+      "three/addons/controls/OrbitControls.js": "./vendor/OrbitControls.js",
+      "three/addons/loaders/GLTFLoader.js": "./vendor/GLTFLoader.js"
+    }
+  }
+  </script>
+</head>
+<body>
+  <div class="cockpit-viewport">
+    <div class="hud-scanlines"></div>
+
+    <!-- 1. TOP HEADER NAVIGATION BAR -->
+    <header class="cockpit-header">
+      <div class="header-left">
+        <div class="brand-badge">
+          <span class="brand-dot"></span>
+          <span>JARVIS // AV-01</span>
+        </div>
+        <div class="hardware-tag">AUDI Q7 TWIN // ESP32 DEVKIT V1</div>
+      </div>
+
+      <div class="header-center">
+        <div class="connection-pill" id="connection-pill">
+          <span class="brand-dot"></span>
+          <span id="connection-label">CONNECTING...</span>
+        </div>
+      </div>
+
+      <div class="header-right">
+        <div class="header-metric">LATENCY: <span class="cyan-text" id="header-ping">-- MS</span></div>
+        <div class="header-metric">UPTIME: <span class="cyan-text" id="header-uptime">00:00</span></div>
+        <div class="header-metric">SYS: <span class="cyan-text" id="header-clock">--:--:--</span></div>
+      </div>
+    </header>
+
+    <!-- 2. MAIN 3-REGION COCKPIT GRID -->
+    <main class="cockpit-main">
+      <!-- LEFT REGION: VEHICLE PROPULSION & STEERING -->
+      <section class="hud-panel left-panel" id="region-left">
+        <!-- Rendered dynamically by leftControls.js -->
+      </section>
+
+      <!-- CENTER REGION: 3D AUDI Q7 VEHICLE VISUALIZATION -->
+      <section class="hud-panel center-panel" id="region-center-wrapper">
+        <!-- Camera Presets Floating Toolbar -->
+        <div class="camera-toolbar">
+          <button class="cam-btn active" data-cam="isometric">3/4 ISO</button>
+          <button class="cam-btn" data-cam="front">FRONT</button>
+          <button class="cam-btn" data-cam="top">TOP-DOWN</button>
+          <button class="cam-btn" data-cam="side">PROFILE</button>
+          <label class="cam-btn btn-upload-model" title="Upload custom Audi Q7 .GLB / .GLTF 3D model">
+            <span>📁</span> LOAD .GLB
+            <input type="file" id="input-model-file" accept=".glb,.gltf" style="display:none;">
+          </label>
+        </div>
+
+        <!-- Three.js Canvas Container -->
+        <div class="three-container" id="region-center"></div>
+
+        <!-- Floating HUD Compass / Stats -->
+        <div class="center-hud-overlay">
+          <div class="hud-stat-box">CHASSIS: <span class="cyan-text">AUDI Q7 2020 SUV</span></div>
+          <div class="hud-stat-box">TELEMETRY SYNC: <span class="cyan-text">MPU-6050 6-DOF</span></div>
+          <div class="hud-stat-box">HEARTBEAT: <span class="cyan-text">400MS FAILSAFE ACTIVE</span></div>
+        </div>
+      </section>
+
+      <!-- RIGHT REGION: AVIONICS TELEMETRY HUD -->
+      <section class="hud-panel right-panel" id="region-right">
+        <!-- Rendered dynamically by rightTelemetry.js -->
+      </section>
+    </main>
+
+    <!-- 3. BOTTOM TACTICAL TOOLBAR -->
+    <footer class="cockpit-toolbar">
+      <div class="header-left">
+        <button class="tb-btn" id="btn-calibrate-imu">
+          <span>⚖</span> CALIBRATE IMU ZERO
+        </button>
+        <button class="tb-btn" id="btn-toggle-mute">
+          <span>🔊</span> SOUND: ON
+        </button>
+      </div>
+
+      <div class="header-right">
+        <button class="tb-btn" id="btn-toggle-fullscreen">
+          <span>⛶</span> FULLSCREEN
+        </button>
+      </div>
+    </footer>
+
+    <!-- 4. FLOATING DRAWERS & MODALS -->
+    <!-- Hardware Testbench Drawer -->
+    <div id="region-testbench"></div>
+
+    <!-- Emergency Accident Overlay -->
+    <div id="region-emergency"></div>
+
+    <!-- Portrait Orientation Lock Shield -->
+    <div id="region-orientation-shield"></div>
+  </div>
+
+  <!-- Main System Application Entry Point -->
+  <script type="module" src="./js/app.js"></script>
+</body>
+</html>
+

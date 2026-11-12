@@ -1,0 +1,23 @@
+{
+  "name": "jarvis-vehicle-cockpit",
+  "version": "1.0.0",
+  "description": "JARVIS Autonomous Vehicle Control Cockpit — High-end automotive digital HUD and 3D telemetry station",
+  "main": "serve.js",
+  "scripts": {
+    "start": "node serve.js",
+    "dev": "node serve.js",
+    "test": "node tests/cockpit.test.js"
+  },
+  "keywords": [
+    "esp32",
+    "cockpit",
+    "threejs",
+    "audi-q7",
+    "hud",
+    "telemetry",
+    "robotics"
+  ],
+  "author": "Autonomous Systems Engineer",
+  "license": "MIT"
+}
+

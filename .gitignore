@@ -1,0 +1,128 @@
+# ==============================================================================
+# JARVIS / ESP32 ROBOTIC CAR & COCKPIT - .gitignore
+# ==============================================================================
+
+# --- Python Virtual Environments & Packages ---
+venv/
+.venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Distribution / packaging
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Unit test / coverage reports
+htmlcov/
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.pytest_cache/
+cover/
+
+# --- Node.js & Web Frontend ---
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+.pnpm-debug.log*
+.npm
+
+# --- Arduino / ESP32 / PlatformIO Build Artifacts ---
+.pio/
+.pioenvs/
+.piolibdeps/
+*.elf
+*.bin
+*.hex
+*.o
+*.d
+
+# Arduino IDE compilation outputs
+sketch/*.bin
+sketch/*.hex
+sketch/*.elf
+
+# --- Environment Variables & Sensitive Credentials ---
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+*.pem
+*.key
+
+# --- Operating System Files ---
+# Windows
+Thumbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+[Dd]esktop.ini
+$RECYCLE.BIN/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+
+# --- IDEs, Editors & Tooling ---
+.idea/
+*.sublime-workspace
+*.sublime-project
+*.swp
+*.swo
+*~
+
+# Visual Studio Code (allow extension recommendations, ignore user state)
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.history/
+*.ion
+
+# --- Logs & Temporary Files ---
+*.log
+tmp/
+temp/
