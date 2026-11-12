@@ -55,6 +55,16 @@ const uint32_t GPS_BAUD = 9600;
 // DS18B20 Temperature (1-Wire)
 const int PIN_DS18B20 = 32;
 
+// Battery Voltage Divider ADC (GPIO 34 - ADC1 CH6, input-only, operates simultaneously with Wi-Fi)
+const int PIN_BATTERY_ADC = 34;
+const float VREF = 3.3f;
+const float ADC_RESOLUTION = 4095.0f;
+// Voltage divider ratio: e.g. R1=100k, R2=47k -> (100+47)/47 = 3.128 (max 10.3V)
+// 2S Li-ion pack: 6.4V empty (0%), 7.4V nominal (50%), 8.4V fully charged (100%)
+const float VOLTAGE_DIVIDER_RATIO = 3.13f;
+const float BATT_MIN_VOLTAGE = 6.4f;
+const float BATT_MAX_VOLTAGE = 8.4f;
+
 // SX1278 LoRa 433MHz (SPI)
 const int PIN_LORA_NSS  = 13;
 const int PIN_LORA_SCK  = 18;
@@ -164,6 +174,13 @@ struct VehicleStatus {
   float peakImpactG = 1.0;
   float impactRoll = 0.0;
   float impactPitch = 0.0;
+
+  // Battery Telemetry
+  bool batteryConnected = false;
+  float batteryVoltage = 0.0;
+  int batteryPercent = 0;
+  String batteryStatus = "NOT CONNECTED";
+  uint32_t lastBatteryReadTime = 0;
 
   // LoRa Telemetry
   uint8_t loraStatus = 0; // 0: Offline, 2: Online, 3: Transmitting, 4: Acked
@@ -518,10 +535,69 @@ void updateMPU() {
 }
 
 // ============================================================================
-// GPS & TEMPERATURE SUBSYSTEMS
+// BATTERY, GPS, TEMPERATURE & LoRa SUBSYSTEMS
 // ============================================================================
 
+void initBattery() {
+  pinMode(PIN_BATTERY_ADC, INPUT);
+  analogReadResolution(12);
+  analogSetAttenuation(ADC_11db);
+  updateBattery();
+  Serial.printf("[BATTERY] Status: %s | Voltage: %.2fV | Percent: %d%%\n", 
+    vehicle.batteryStatus.c_str(), vehicle.batteryVoltage, vehicle.batteryPercent);
+}
+
+void updateBattery() {
+  uint32_t now = millis();
+  if (now - vehicle.lastBatteryReadTime < 500 && vehicle.lastBatteryReadTime != 0) {
+    return;
+  }
+  vehicle.lastBatteryReadTime = now;
+
+  // Average 16 ADC samples for noise-free reading
+  uint32_t sum = 0;
+  for (int i = 0; i < 16; i++) {
+    sum += analogRead(PIN_BATTERY_ADC);
+    delayMicroseconds(50);
+  }
+  float avgAdc = (float)sum / 16.0f;
+
+  // If raw ADC < 150 (~0.12V at pin), no voltage divider is connected.
+  // Master Prompt Rule: "Never estimate real battery voltage from nominal 2S battery voltage.
+  // If no voltage divider is installed, display NOT CONNECTED."
+  if (avgAdc < 150.0f) {
+    vehicle.batteryConnected = false;
+    vehicle.batteryVoltage = 0.0f;
+    vehicle.batteryPercent = 0;
+    vehicle.batteryStatus = "NOT CONNECTED";
+  } else {
+    vehicle.batteryConnected = true;
+    float pinVolts = (avgAdc / ADC_RESOLUTION) * VREF;
+    float packVolts = pinVolts * VOLTAGE_DIVIDER_RATIO;
+
+    if (vehicle.batteryVoltage <= 0.1f) {
+      vehicle.batteryVoltage = packVolts;
+    } else {
+      vehicle.batteryVoltage = (0.85f * vehicle.batteryVoltage) + (0.15f * packVolts);
+    }
+
+    float pct = ((vehicle.batteryVoltage - BATT_MIN_VOLTAGE) / (BATT_MAX_VOLTAGE - BATT_MIN_VOLTAGE)) * 100.0f;
+    if (pct < 0.0f) pct = 0.0f;
+    if (pct > 100.0f) pct = 100.0f;
+    vehicle.batteryPercent = (int)round(pct);
+
+    if (vehicle.batteryPercent > 50) {
+      vehicle.batteryStatus = "HEALTHY";
+    } else if (vehicle.batteryPercent > 20) {
+      vehicle.batteryStatus = "WARNING";
+    } else {
+      vehicle.batteryStatus = "CRITICAL";
+    }
+  }
+}
+
 void initGPS() {
+  Serial.println(F("[GPS] Starting NEO-6M on GPIO 16 (RX) / 17 (TX)..."));
   gpsSerial.begin(GPS_BAUD, SERIAL_8N1, PIN_GPS_RX, PIN_GPS_TX);
 }
 
@@ -573,14 +649,17 @@ void updateTemp() {
 }
 
 void initLoRa() {
+  Serial.println(F("[LoRa] Checking RA-02 SX1278 transceiver on SPI bus..."));
   SPI.begin(PIN_LORA_SCK, PIN_LORA_MISO, PIN_LORA_MOSI, PIN_LORA_NSS);
   LoRa.setPins(PIN_LORA_NSS, PIN_LORA_RST, PIN_LORA_DIO0);
   if (LoRa.begin(LORA_FREQ)) {
     vehicle.loraStatus = 2; // Online
     LoRa.setTxPower(17);
     LoRa.setSpreadingFactor(7);
+    Serial.println(F("[LoRa] SX1278 transceiver online on 433MHz."));
   } else {
     vehicle.loraStatus = 0; // Offline
+    Serial.println(F("[LoRa] SX1278 offline or hardware not wired. (Continuing safely)"));
   }
 }
 
@@ -652,6 +731,10 @@ String buildTelemetryJson() {
   s += "\"temp\":" + String(vehicle.temperatureC, 2) + ",";
   s += "\"temperatureC\":" + String(vehicle.temperatureC, 2) + ",";
   s += "\"mpuTemp\":" + String(vehicle.mpuTempC, 2) + ",";
+  s += "\"batteryConnected\":" + String(vehicle.batteryConnected ? "true" : "false") + ",";
+  s += "\"batteryVoltage\":" + (vehicle.batteryConnected ? String(vehicle.batteryVoltage, 2) : "null") + ",";
+  s += "\"batteryPercent\":" + (vehicle.batteryConnected ? String(vehicle.batteryPercent) : "null") + ",";
+  s += "\"batteryStatus\":\"" + vehicle.batteryStatus + "\",";
   s += "\"uptime\":" + String(millis()) + ",";
 
   // 2. JARVIS Structured Cockpit Sub-Objects
@@ -698,6 +781,13 @@ String buildTelemetryJson() {
   s += "\"peakG\":" + String(vehicle.peakImpactG, 2) + ",";
   s += "\"impactRoll\":" + String(vehicle.impactRoll, 1) + ",";
   s += "\"impactPitch\":" + String(vehicle.impactPitch, 1);
+  s += "},";
+
+  s += "\"battery\":{";
+  s += "\"connected\":" + String(vehicle.batteryConnected ? "true" : "false") + ",";
+  s += "\"voltage\":" + (vehicle.batteryConnected ? String(vehicle.batteryVoltage, 2) : "null") + ",";
+  s += "\"percentage\":" + (vehicle.batteryConnected ? String(vehicle.batteryPercent) : "null") + ",";
+  s += "\"status\":\"" + vehicle.batteryStatus + "\"";
   s += "},";
 
   s += "\"lora\":{";
@@ -898,55 +988,40 @@ void handleAlertClear() {
 }
 
 // ============================================================================
-// MAIN SETUP & EXECUTION LOOP
+// WI-FI, SERVERS & ESP-NOW SUBSYSTEMS
 // ============================================================================
 
-void setup() {
-  Serial.begin(115200);
-  delay(500);
-  Serial.println(F("\n========================================================"));
-  Serial.println(F(" JARVIS AUTONOMOUS VEHICLE COCKPIT — UNIFIED FIRMWARE   "));
-  Serial.println(F("========================================================"));
+void initWiFiAP() {
+  Serial.println(F("[Wi-Fi] Initializing SoftAP radio..."));
+  WiFi.persistent(false);
+  WiFi.disconnect(true);
+  delay(60);
 
-  // 1. Initialize Motors
-  initMotors();
-
-  // 2. Initialize I2C & MPU6050
-  Wire.begin(PIN_I2C_SDA, PIN_I2C_SCL, 100000);
-  Wire.setTimeOut(40);
-  if (wakeAndConfigureMPU()) {
-    calibrateMPU();
-  }
-
-  // 3. Initialize GPS, Temperature, LoRa
-  initGPS();
-  initTemp();
-  initLoRa();
-
-  // 4. Configure Wi-Fi SoftAP on Channel 6
   WiFi.mode(WIFI_AP);
-  WiFi.softAPConfig(AP_IP, AP_GATEWAY, AP_SUBNET);
-  bool apOk = WiFi.softAP(AP_SSID, AP_PASSWORD, HARDCODED_CHANNEL);
+  delay(40);
+
+  // Default IP on ESP32 SoftAP is 192.168.4.1.
+  // Explicitly set SSID, Password, Channel, ssid_hidden=0 (broadcast), max_connection=4
+  bool apOk = WiFi.softAP(AP_SSID, AP_PASSWORD, HARDCODED_CHANNEL, 0, 4);
+
+  // Set maximum transmission power for strong RF range
+  WiFi.setTxPower(WIFI_POWER_19_5dBm);
   esp_wifi_set_channel(HARDCODED_CHANNEL, WIFI_SECOND_CHAN_NONE);
 
   if (apOk) {
-    Serial.printf("[Wi-Fi AP] SSID: %s (Channel %d)\n", AP_SSID, HARDCODED_CHANNEL);
-    Serial.printf("[Wi-Fi AP] IP: %s\n", WiFi.softAPIP().toString().c_str());
+    Serial.printf("[Wi-Fi AP] Broadcast SSID : %s\n", AP_SSID);
+    Serial.printf("[Wi-Fi AP] Password       : %s\n", AP_PASSWORD);
+    Serial.printf("[Wi-Fi AP] Channel        : %d\n", HARDCODED_CHANNEL);
+    Serial.printf("[Wi-Fi AP] Gateway IP     : %s\n", WiFi.softAPIP().toString().c_str());
+    Serial.printf("[Wi-Fi AP] MAC Address    : %s\n", WiFi.softAPmacAddress().c_str());
+  } else {
+    Serial.println(F("[Wi-Fi AP WARNING] Initial softAP call returned false, retrying basic AP..."));
+    WiFi.softAP(AP_SSID, AP_PASSWORD);
+    Serial.printf("[Wi-Fi AP] Gateway IP     : %s\n", WiFi.softAPIP().toString().c_str());
   }
+}
 
-  // 5. Initialize ESP-NOW
-  if (esp_now_init() == ESP_OK) {
-    espNowReady = true;
-    esp_now_peer_info_t peerInfo = {};
-    memcpy(peerInfo.peer_addr, receiverAddress, 6);
-    peerInfo.channel = HARDCODED_CHANNEL;
-    peerInfo.encrypt = false;
-    if (esp_now_add_peer(&peerInfo) == ESP_OK) {
-      Serial.println(F("[ESP-NOW] Peer EC:62:60:A5:CC:54 registered."));
-    }
-  }
-
-  // 6. Setup REST API Endpoints
+void initServers() {
   server.on("/status", HTTP_GET, handleStatus);
   server.on("/status", HTTP_OPTIONS, handleOptions);
   server.on("/cmd", HTTP_GET, handleCommand);
@@ -963,14 +1038,68 @@ void setup() {
   });
 
   server.begin();
+  Serial.println(F("[REST API] Port 80 HTTP server listening."));
 
-  // 7. Setup WebSocket Server on Port 81
   webSocket.begin();
   webSocket.onEvent(webSocketEvent);
+  Serial.println(F("[WebSocket] Port 81 server listening."));
+}
+
+void initEspNow() {
+  if (esp_now_init() == ESP_OK) {
+    espNowReady = true;
+    esp_now_peer_info_t peerInfo = {};
+    memcpy(peerInfo.peer_addr, receiverAddress, 6);
+    peerInfo.channel = HARDCODED_CHANNEL;
+    peerInfo.encrypt = false;
+    if (esp_now_add_peer(&peerInfo) == ESP_OK) {
+      Serial.println(F("[ESP-NOW] Peer EC:62:60:A5:CC:54 registered on Channel 6."));
+    }
+  } else {
+    Serial.println(F("[ESP-NOW] Peer registration skipped / hardware busy."));
+  }
+}
+
+// ============================================================================
+// MAIN SETUP & EXECUTION LOOP
+// ============================================================================
+
+void setup() {
+  Serial.begin(115200);
+  delay(200);
+  Serial.println(F("\n========================================================"));
+  Serial.println(F(" JARVIS AUTONOMOUS VEHICLE COCKPIT — UNIFIED FIRMWARE   "));
+  Serial.println(F("========================================================"));
+
+  // STEP 1: INITIALIZE WI-FI AP FIRST!
+  // Ensures SSID 'ESP32_CAR' broadcasts immediately within 150ms of boot
+  initWiFiAP();
+
+  // STEP 2: START HTTP & WEBSOCKET SERVERS
+  initServers();
+
+  // STEP 3: INITIALIZE MOTORS (Safe stop state)
+  initMotors();
+
+  // STEP 4: INITIALIZE BATTERY ADC MONITOR (GPIO 34)
+  initBattery();
+
+  // STEP 5: INITIALIZE I2C & MPU6050
+  Wire.begin(PIN_I2C_SDA, PIN_I2C_SCL, 100000);
+  Wire.setTimeOut(40);
+  if (wakeAndConfigureMPU()) {
+    calibrateMPU();
+  }
+
+  // STEP 6: INITIALIZE SENSORS & BEACONS SAFELY
+  initTemp();
+  initGPS();
+  initLoRa();
+  initEspNow();
 
   vehicle.lastCommandTime = millis();
   vehicle.lastMotionPulseTime = millis();
-  Serial.println(F("[SYSTEM] Online and awaiting commands."));
+  Serial.println(F("[SYSTEM] Cockpit online and ready for connection."));
 }
 
 void loop() {
@@ -978,10 +1107,11 @@ void loop() {
   server.handleClient();
   webSocket.loop();
 
-  // 2. Update Sensors & Dynamics
+  // 2. Update Sensors, Battery & Dynamics
   updateMPU();
   updateGPS();
   updateTemp();
+  updateBattery();
   updateVehicleDynamics();
   broadcastTelemetry();
 

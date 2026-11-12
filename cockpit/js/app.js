@@ -97,6 +97,47 @@ class JarvisCockpitApp {
       const uptimeEl = document.getElementById('header-uptime');
       if (uptimeEl) uptimeEl.textContent = `${min.toString().padStart(2, '0')}:${sec.toString().padStart(2, '0')}`;
     }
+
+    // 5. Update Tactical Battery Telemetry Widget
+    this.updateBatteryWidget(data.battery);
+  }
+
+  updateBatteryWidget(battery) {
+    const pill = document.getElementById('hud-battery-pill');
+    const bar = document.getElementById('hud-battery-bar');
+    const percentEl = document.getElementById('hud-battery-percent');
+    const voltsEl = document.getElementById('hud-battery-volts');
+    if (!pill || !bar || !percentEl || !voltsEl) return;
+
+    if (!battery || !battery.connected || battery.percentage === null || isNaN(battery.percentage)) {
+      pill.className = 'tb-battery-pill offline';
+      bar.style.width = '0%';
+      percentEl.textContent = 'NOT CONNECTED';
+      voltsEl.textContent = '';
+      voltsEl.style.display = 'none';
+      pill.title = 'No voltage divider installed on ESP32 ADC (GPIO 34)';
+    } else {
+      const pct = Math.min(100, Math.max(0, Math.round(battery.percentage)));
+      bar.style.width = `${pct}%`;
+      percentEl.textContent = `${pct}%`;
+
+      if (battery.voltage !== null && !isNaN(battery.voltage)) {
+        voltsEl.style.display = 'inline';
+        voltsEl.textContent = `(${battery.voltage.toFixed(1)}V)`;
+      } else {
+        voltsEl.style.display = 'none';
+      }
+
+      pill.className = 'tb-battery-pill';
+      if (pct > 50) {
+        pill.classList.add('good');
+      } else if (pct > 20) {
+        pill.classList.add('mid');
+      } else {
+        pill.classList.add('low');
+      }
+      pill.title = `Propulsion Battery: ${pct}% ${battery.voltage ? `· ${battery.voltage.toFixed(2)}V` : ''} (${battery.status || 'OK'})`;
+    }
   }
 
   handleConnectionStatus({ connected, simulated }) {
@@ -114,6 +155,7 @@ class JarvisCockpitApp {
     } else {
       pill.className = 'connection-pill offline';
       label.textContent = 'HARDWARE DISCONNECTED';
+      this.updateBatteryWidget(null);
     }
   }
 

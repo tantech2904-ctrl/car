@@ -185,6 +185,32 @@ export class RightTelemetry {
               </div>
             </div>
           </div>
+
+          <!-- 5. PROPULSION POWER / 2S BATTERY PACK -->
+          <div class="telemetry-card">
+            <div class="card-header">
+              <span class="card-title">2S LI-ION // POWER PACK</span>
+              <div class="card-status-pill" id="pill-battery-hud">ONLINE</div>
+            </div>
+
+            <div class="temp-readout-row">
+              <div class="temp-big-val" id="val-battery-big">85<span class="unit">%</span></div>
+              <div class="temp-meta">
+                <div class="temp-status-text" id="val-battery-status">7.84V</div>
+                <div class="temp-fahrenheit" id="val-battery-sub">HEALTHY</div>
+              </div>
+            </div>
+
+            <div class="lora-rssi-bar" style="margin-top: 8px;">
+              <div class="rssi-labels">
+                <span>REMAINING CAPACITY:</span>
+                <span class="cyan-text" id="val-battery-capacity">85%</span>
+              </div>
+              <div class="rssi-track">
+                <div class="rssi-fill" id="bar-battery-fill" style="width: 85%;"></div>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     `;
@@ -359,6 +385,44 @@ export class RightTelemetry {
       } else {
         this.setText('#val-lora-rssi', 'AWAITING ACK');
         this.setBarWidth('#bar-lora-rssi', 0);
+      }
+    }
+
+    // 5. Battery & Power Diagnostics
+    if (telemetry.battery) {
+      const b = telemetry.battery;
+      const bConnected = Boolean(b.connected);
+      const bPill = this.container.querySelector('#pill-battery-hud');
+
+      if (!bConnected || b.percentage === null || isNaN(b.percentage)) {
+        if (bPill) {
+          bPill.textContent = 'NOT CONNECTED';
+          bPill.className = 'card-status-pill offline';
+        }
+        this.setText('#val-battery-big', '--<span class="unit">%</span>', true);
+        this.setText('#val-battery-status', 'NO DIVIDER');
+        this.setText('#val-battery-sub', 'NOT CONNECTED');
+        this.setText('#val-battery-capacity', 'OFFLINE');
+        this.setBarWidth('#bar-battery-fill', 0);
+      } else {
+        const pct = Math.min(100, Math.max(0, Math.round(b.percentage)));
+        if (bPill) {
+          bPill.textContent = `${pct}%`;
+          bPill.className = `card-status-pill ${pct > 50 ? 'online' : (pct > 20 ? 'no-fix' : 'offline')}`;
+        }
+        this.setText('#val-battery-big', `${pct}<span class="unit">%</span>`, true);
+        const volts = b.voltage !== null ? `${toNum(b.voltage).toFixed(2)}V` : '--V';
+        this.setText('#val-battery-status', volts);
+        this.setText('#val-battery-sub', b.status || (pct > 50 ? 'HEALTHY' : 'WARNING'));
+        this.setText('#val-battery-capacity', `${pct}% (${volts})`);
+        this.setBarWidth('#bar-battery-fill', pct);
+
+        const bar = this.container.querySelector('#bar-battery-fill');
+        if (bar) {
+          if (pct > 50) bar.style.background = 'var(--cyan-primary)';
+          else if (pct > 20) bar.style.background = 'var(--amber-warn)';
+          else bar.style.background = 'var(--red-emergency)';
+        }
       }
     }
   }

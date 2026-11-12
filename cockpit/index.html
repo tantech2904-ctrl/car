@@ -93,16 +93,30 @@
     <!-- 3. BOTTOM TACTICAL TOOLBAR -->
     <footer class="cockpit-toolbar">
       <div class="header-left">
-        <button class="tb-btn" id="btn-calibrate-imu">
+        <button class="tb-btn" id="btn-calibrate-imu" title="Calibrate MPU-6050 Zero Orientation">
           <span>⚖</span> CALIBRATE IMU ZERO
         </button>
-        <button class="tb-btn" id="btn-toggle-mute">
+        <button class="tb-btn" id="btn-toggle-mute" title="Toggle Cockpit Audio Effects">
           <span>🔊</span> SOUND: ON
         </button>
+        <!-- TACTICAL VEHICLE BATTERY PERCENTAGE WIDGET -->
+        <div class="tb-battery-pill" id="hud-battery-pill" title="Vehicle Power Telemetry (2S Li-ion)">
+          <div class="battery-icon">
+            <div class="battery-shell">
+              <div class="battery-level-bar" id="hud-battery-bar" style="width: 85%;"></div>
+            </div>
+            <div class="battery-nub"></div>
+          </div>
+          <div class="battery-text-group">
+            <span class="battery-label">BATT:</span>
+            <span class="battery-percent-val" id="hud-battery-percent">85%</span>
+            <span class="battery-volts-val" id="hud-battery-volts">(7.8V)</span>
+          </div>
+        </div>
       </div>
 
       <div class="header-right">
-        <button class="tb-btn" id="btn-toggle-fullscreen">
+        <button class="tb-btn" id="btn-toggle-fullscreen" title="Toggle Fullscreen Cockpit">
           <span>⛶</span> FULLSCREEN
         </button>
       </div>

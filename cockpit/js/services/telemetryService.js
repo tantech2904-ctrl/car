@@ -53,7 +53,11 @@ export class TelemetryService {
       loraStatus: 2, // Online
       loraSent: 0,
       loraAcked: 0,
-      accidentState: 0
+      accidentState: 0,
+      batteryConnected: true,
+      batteryPercent: 85,
+      batteryVoltage: 7.84,
+      batteryStatus: 'HEALTHY'
     };
 
     this.simInterval = null;
@@ -405,6 +409,31 @@ export class TelemetryService {
       };
     }
 
+    // 5. Battery Telemetry Normalization
+    let battConnected = false;
+    let battVoltage = null;
+    let battPercent = null;
+    let battStatus = 'NOT CONNECTED';
+
+    if (data.battery && typeof data.battery === 'object') {
+      battConnected = Boolean(data.battery.connected);
+      battVoltage = (data.battery.voltage !== null && data.battery.voltage !== undefined) ? toNum(data.battery.voltage) : null;
+      battPercent = (data.battery.percentage !== null && data.battery.percentage !== undefined) ? toNum(data.battery.percentage) : null;
+      battStatus = data.battery.status || (battConnected ? 'OK' : 'NOT CONNECTED');
+    } else if (data.batteryConnected !== undefined) {
+      battConnected = Boolean(data.batteryConnected);
+      battVoltage = (data.batteryVoltage !== null && data.batteryVoltage !== undefined) ? toNum(data.batteryVoltage) : null;
+      battPercent = (data.batteryPercent !== null && data.batteryPercent !== undefined) ? toNum(data.batteryPercent) : null;
+      battStatus = data.batteryStatus || (battConnected ? 'OK' : 'NOT CONNECTED');
+    }
+
+    data.battery = {
+      connected: battConnected,
+      voltage: battVoltage,
+      percentage: battPercent,
+      status: battStatus
+    };
+
     return data;
   }
 
@@ -522,6 +551,12 @@ export class TelemetryService {
           acked: this.simState.loraAcked,
           retries: 0,
           rssi: -68
+        },
+        battery: {
+          connected: this.simState.batteryConnected,
+          voltage: this.simState.batteryConnected ? parseFloat(this.simState.batteryVoltage.toFixed(2)) : null,
+          percentage: this.simState.batteryConnected ? this.simState.batteryPercent : null,
+          status: this.simState.batteryConnected ? (this.simState.batteryPercent > 50 ? 'HEALTHY' : (this.simState.batteryPercent > 20 ? 'WARNING' : 'CRITICAL')) : 'NOT CONNECTED'
         }
       };
 

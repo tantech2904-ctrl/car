@@ -940,6 +940,164 @@ html, body {
 }
 
 /* --------------------------------------------------------------------------
+   TACTICAL BATTERY PERCENTAGE WIDGET (Bottom Toolbar)
+--------------------------------------------------------------------------- */
+.tb-battery-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(0, 240, 255, 0.05);
+  border: 1px solid rgba(0, 240, 255, 0.25);
+  padding: 4px 10px;
+  border-radius: 3px;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  transition: all 0.2s ease;
+  user-select: none;
+  margin-left: 8px;
+}
+
+.tb-battery-pill:hover {
+  border-color: var(--cyan-primary);
+  background: rgba(0, 240, 255, 0.1);
+  box-shadow: 0 0 10px rgba(0, 240, 255, 0.2);
+}
+
+.battery-icon {
+  display: flex;
+  align-items: center;
+}
+
+.battery-shell {
+  width: 22px;
+  height: 12px;
+  border: 1.5px solid var(--cyan-primary);
+  border-radius: 2px;
+  padding: 1.5px;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+}
+
+.battery-nub {
+  width: 2.5px;
+  height: 6px;
+  background: var(--cyan-primary);
+  border-radius: 0 1px 1px 0;
+  margin-left: 1px;
+}
+
+.battery-level-bar {
+  height: 100%;
+  background: var(--cyan-primary);
+  border-radius: 1px;
+  box-shadow: 0 0 6px var(--cyan-primary);
+  transition: width 0.3s ease, background 0.3s ease, box-shadow 0.3s ease;
+}
+
+.battery-text-group {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.battery-label {
+  color: var(--text-dim);
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+.battery-percent-val {
+  color: var(--cyan-primary);
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+
+.battery-volts-val {
+  color: var(--text-dim);
+  font-size: 0.6rem;
+}
+
+/* Good State (> 50%) */
+.tb-battery-pill.good .battery-shell {
+  border-color: var(--cyan-primary);
+}
+.tb-battery-pill.good .battery-nub {
+  background: var(--cyan-primary);
+}
+.tb-battery-pill.good .battery-level-bar {
+  background: var(--cyan-primary);
+  box-shadow: 0 0 6px var(--cyan-primary);
+}
+.tb-battery-pill.good .battery-percent-val {
+  color: var(--cyan-primary);
+}
+
+/* Mid Warning State (20% - 50%) */
+.tb-battery-pill.mid {
+  border-color: rgba(255, 176, 0, 0.4);
+  background: rgba(255, 176, 0, 0.08);
+}
+.tb-battery-pill.mid .battery-shell {
+  border-color: var(--amber-warn);
+}
+.tb-battery-pill.mid .battery-nub {
+  background: var(--amber-warn);
+}
+.tb-battery-pill.mid .battery-level-bar {
+  background: var(--amber-warn);
+  box-shadow: 0 0 6px var(--amber-warn);
+}
+.tb-battery-pill.mid .battery-percent-val {
+  color: var(--amber-warn);
+}
+
+/* Critical Low State (< 20%) */
+.tb-battery-pill.low {
+  border-color: rgba(255, 34, 51, 0.6);
+  background: rgba(255, 34, 51, 0.12);
+  animation: pulse-danger 1.5s infinite;
+}
+.tb-battery-pill.low .battery-shell {
+  border-color: var(--red-emergency);
+}
+.tb-battery-pill.low .battery-nub {
+  background: var(--red-emergency);
+}
+.tb-battery-pill.low .battery-level-bar {
+  background: var(--red-emergency);
+  box-shadow: 0 0 8px var(--red-emergency);
+}
+.tb-battery-pill.low .battery-percent-val {
+  color: var(--red-emergency);
+}
+
+/* Offline / Not Connected State */
+.tb-battery-pill.offline {
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.02);
+}
+.tb-battery-pill.offline .battery-shell {
+  border-color: var(--text-dim);
+}
+.tb-battery-pill.offline .battery-nub {
+  background: var(--text-dim);
+}
+.tb-battery-pill.offline .battery-level-bar {
+  width: 0% !important;
+  box-shadow: none;
+}
+.tb-battery-pill.offline .battery-percent-val {
+  color: var(--text-dim);
+  font-size: 0.62rem;
+}
+.tb-battery-pill.offline .battery-volts-val {
+  display: none;
+}
+
+/* --------------------------------------------------------------------------
    TESTBENCH DRAWER
 --------------------------------------------------------------------------- */
 .testbench-drawer {

@@ -153,6 +153,77 @@ function testWatchdogTimeout() {
   console.log('  [PASS] Hardware watchdog independently stops motors when commands become stale.');
 }
 
+// 5. Test Battery Telemetry & ADC Divider Detection
+function testBatteryMonitoring() {
+  console.log('Testing Battery Telemetry & Hardware ADC Divider Safety...');
+
+  function evaluateBatteryADC(rawADC) {
+    const ADC_RESOLUTION = 4095.0;
+    const VREF = 3.3;
+    const VOLTAGE_DIVIDER_RATIO = 3.13;
+    const BATT_MIN = 6.4;
+    const BATT_MAX = 8.4;
+
+    if (rawADC < 150) {
+      return {
+        connected: false,
+        voltage: null,
+        percentage: null,
+        status: "NOT CONNECTED"
+      };
+    }
+
+    const pinVolts = (rawADC / ADC_RESOLUTION) * VREF;
+    const packVolts = pinVolts * VOLTAGE_DIVIDER_RATIO;
+    let pct = ((packVolts - BATT_MIN) / (BATT_MAX - BATT_MIN)) * 100.0;
+    if (pct < 0) pct = 0;
+    if (pct > 100) pct = 100;
+    const roundPct = Math.round(pct);
+
+    let status = "HEALTHY";
+    if (roundPct <= 20) status = "CRITICAL";
+    else if (roundPct <= 50) status = "WARNING";
+
+    return {
+      connected: true,
+      voltage: parseFloat(packVolts.toFixed(2)),
+      percentage: roundPct,
+      status: status
+    };
+  }
+
+  // Case A: No voltage divider wired (pin floating, rawADC ~ 30)
+  const noDivider = evaluateBatteryADC(30);
+  assert.strictEqual(noDivider.connected, false);
+  assert.strictEqual(noDivider.status, "NOT CONNECTED");
+  assert.strictEqual(noDivider.percentage, null);
+  console.log('  [PASS] Floating ADC (rawADC < 150) correctly flagged as NOT CONNECTED.');
+
+  // Case B: 2S Pack at ~7.4V (nominal 50%)
+  // Pin voltage = 7.4 / 3.13 = 2.364V -> rawADC = (2.364 / 3.3) * 4095 ~ 2934
+  const halfPack = evaluateBatteryADC(2934);
+  assert.strictEqual(halfPack.connected, true);
+  assert.strictEqual(halfPack.percentage, 50);
+  assert.strictEqual(halfPack.status, "WARNING");
+  console.log('  [PASS] 2S Nominal (7.4V) accurately calculated at 50% (WARNING).');
+
+  // Case C: Fully charged 2S pack (8.4V = 100%)
+  // Pin voltage = 8.4 / 3.13 = 2.683V -> rawADC = (2.683 / 3.3) * 4095 ~ 3330
+  const fullPack = evaluateBatteryADC(3330);
+  assert.strictEqual(fullPack.connected, true);
+  assert.strictEqual(fullPack.percentage, 100);
+  assert.strictEqual(fullPack.status, "HEALTHY");
+  console.log('  [PASS] 2S Fully charged (8.4V) accurately calculated at 100% (HEALTHY).');
+
+  // Case D: Low battery pack (6.6V = ~10%)
+  // Pin voltage = 6.6 / 3.13 = 2.108V -> rawADC = (2.108 / 3.3) * 4095 ~ 2617
+  const lowPack = evaluateBatteryADC(2617);
+  assert.strictEqual(lowPack.connected, true);
+  assert.strictEqual(lowPack.percentage, 10);
+  assert.strictEqual(lowPack.status, "CRITICAL");
+  console.log('  [PASS] 2S Critical pack (6.6V) triggers CRITICAL alert status.');
+}
+
 // Run all test suites
 console.log('\n======================================================');
 console.log(' RUNNING JARVIS COCKPIT AUTOMATED TEST SUITE          ');
@@ -163,7 +234,8 @@ try {
   testAccidentStateMachine();
   testMotorCommandSynthesis();
   testWatchdogTimeout();
-  console.log('\n>>> ALL 4 TEST SUITES PASSED CLEANLY (100% SUCCESS) <<<\n');
+  testBatteryMonitoring();
+  console.log('\n>>> ALL 5 TEST SUITES PASSED CLEANLY (100% SUCCESS) <<<\n');
   process.exit(0);
 } catch (err) {
   console.error('\n[TEST FAILURE]', err);

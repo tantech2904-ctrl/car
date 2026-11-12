@@ -70,6 +70,20 @@ export class TestbenchPanel {
                 <button class="tb-btn-sub" id="tb-btn-toggle-gps">TOGGLE GPS FIX</button>
               </div>
             </div>
+
+            <!-- Battery Power Diagnostics & Simulation -->
+            <div class="tb-col">
+              <span class="tb-label">PROPULSION BATTERY HARNESS:</span>
+              <div class="tb-slider-row">
+                <span>CHARGE:</span>
+                <input type="range" min="0" max="100" value="85" id="tb-battery-slider" class="hud-slider">
+                <span id="tb-battery-val">85%</span>
+              </div>
+              <div class="tb-slider-row">
+                <button class="tb-btn-sub" id="tb-btn-toggle-battery">STATUS: CONNECTED (CLICK TO TOGGLE)</button>
+              </div>
+              <div class="tb-hint">Tests 'NOT CONNECTED' when no voltage divider is installed vs. live 2S 6.4V-8.4V pack telemetry.</div>
+            </div>
           </div>
         </div>
       </div>
@@ -88,6 +102,8 @@ export class TestbenchPanel {
     const rollSlider = this.container.querySelector('#tb-roll-slider');
     const btnResetTilt = this.container.querySelector('#tb-btn-reset-tilt');
     const btnToggleGps = this.container.querySelector('#tb-btn-toggle-gps');
+    const batterySlider = this.container.querySelector('#tb-battery-slider');
+    const btnToggleBattery = this.container.querySelector('#tb-btn-toggle-battery');
 
     toggleBtn.addEventListener('click', () => {
       this.isOpen = !this.isOpen;
@@ -142,6 +158,37 @@ export class TestbenchPanel {
     btnToggleGps.addEventListener('click', () => {
       this.telemetry.simState.gpsFix = !this.telemetry.simState.gpsFix;
     });
+
+    if (batterySlider) {
+      batterySlider.addEventListener('input', (e) => {
+        const val = parseInt(e.target.value, 10);
+        const valEl = this.container.querySelector('#tb-battery-val');
+        if (valEl) valEl.textContent = `${val}%`;
+        this.telemetry.simState.batteryPercent = val;
+        // 2S curve: 6.4V (0%) to 8.4V (100%)
+        this.telemetry.simState.batteryVoltage = 6.4 + (val / 100.0) * 2.0;
+        this.telemetry.simState.batteryConnected = true;
+        if (btnToggleBattery) {
+          btnToggleBattery.textContent = 'STATUS: CONNECTED (CLICK TO TOGGLE)';
+        }
+      });
+    }
+
+    if (btnToggleBattery) {
+      btnToggleBattery.addEventListener('click', () => {
+        this.telemetry.simState.batteryConnected = !this.telemetry.simState.batteryConnected;
+        if (this.telemetry.simState.batteryConnected) {
+          btnToggleBattery.textContent = 'STATUS: CONNECTED (CLICK TO TOGGLE)';
+          const val = parseInt(batterySlider.value, 10);
+          this.telemetry.simState.batteryPercent = val;
+          this.telemetry.simState.batteryVoltage = 6.4 + (val / 100.0) * 2.0;
+        } else {
+          btnToggleBattery.textContent = 'STATUS: NOT CONNECTED (DIVIDER ABSENT)';
+          this.telemetry.simState.batteryPercent = null;
+          this.telemetry.simState.batteryVoltage = null;
+        }
+      });
+    }
   }
 }
 
