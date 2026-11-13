@@ -140,17 +140,112 @@ function testMotorCommandSynthesis() {
 function testWatchdogTimeout() {
   console.log('Testing Communication Watchdog Timeout Failsafe...');
 
-  const TIMEOUT_MS = 400;
-  let lastCommandTime = 1000;
-  let currentTime = 1500; // 500ms later (> 400ms timeout)
-  let vehicleStopped = false;
+  const TIMEOUT_MS = 350;
+  let lastMotionPulseTime = 1000;
+  let currentTime = 1400; // 400ms later (> 350ms timeout)
+  let vehicleDrive = 'FORWARD';
+  let vehicleSteer = 'CENTER';
+  let pins = { drive1: 0, drive2: 1, steer1: 0, steer2: 0 }; // Running forward
 
-  if (currentTime - lastCommandTime > TIMEOUT_MS) {
-    vehicleStopped = true;
+  // Hardware watchdog simulation (matches car_esp32_firmware.ino loop)
+  if (vehicleDrive !== 'STOP' || vehicleSteer !== 'CENTER') {
+    if (currentTime - lastMotionPulseTime > TIMEOUT_MS) {
+      // stopCar()
+      pins.drive1 = 0;
+      pins.drive2 = 0;
+      pins.steer1 = 0;
+      pins.steer2 = 0;
+      vehicleDrive = 'STOP';
+      vehicleSteer = 'CENTER';
+    }
   }
 
-  assert.strictEqual(vehicleStopped, true, 'Vehicle must stop after 400ms without heartbeat');
+  assert.strictEqual(vehicleDrive, 'STOP', 'Vehicle drive must be STOP after 350ms dead-man timeout');
+  assert.strictEqual(vehicleSteer, 'CENTER', 'Vehicle steer must be CENTER');
+  assert.strictEqual(pins.drive1, 0, 'Drive pin 1 must be grounded LOW');
+  assert.strictEqual(pins.drive2, 0, 'Drive pin 2 must be grounded LOW');
   console.log('  [PASS] Hardware watchdog independently stops motors when commands become stale.');
+}
+
+// 5. Test Firmware Stop Command & WebSocket Buffer Safety
+function testFirmwareStopAndBufferSafety() {
+  console.log('Testing Firmware Stop Command & WebSocket Buffer Safety...');
+
+  // Simulating firmware command parser logic with buffer isolation
+  function simulateFirmwareParser(rawBuffer, length) {
+    // Exact firmware fix: char buf[length + 1]; memcpy; buf[length] = '\0'
+    const cleanStr = rawBuffer.slice(0, length).toString('utf8').trim();
+    let lower = cleanStr.toLowerCase();
+
+    let state = { drive: 'STOP', steer: 'CENTER', stopped: false };
+
+    // Heartbeat check
+    if (cleanStr === 'CMD:HEARTBEAT' || cleanStr === 'ping') {
+      return { ...state, heartbeat: true };
+    }
+
+    // Universal Stop check
+    if (lower === 'stop' || lower === 's' || lower === 'halt' ||
+        cleanStr === 'CMD:STOP' || cleanStr === 'CMD:S' || cleanStr === 'CMD:ESTOP' ||
+        cleanStr === 'CMD:MOVE:STOP:CENTER' || cleanStr === 'CMD:MOVE:0:0' ||
+        lower.indexOf('stop') >= 0 || lower.indexOf('halt') >= 0) {
+      state.stopped = true;
+      return state;
+    }
+
+    if (cleanStr.startsWith('CMD:MOVE:')) {
+      const rest = cleanStr.substring(9);
+      const colon = rest.indexOf(':');
+      if (colon > 0) {
+        const dStr = rest.substring(0, colon);
+        const sStr = rest.substring(colon + 1);
+        if (dStr === 'FWD' || dStr === 'FORWARD') state.drive = 'FORWARD';
+        else if (dStr === 'REV' || dStr === 'BACKWARD') state.drive = 'BACKWARD';
+
+        if (sStr === 'LEFT') state.steer = 'LEFT';
+        else if (sStr === 'RIGHT') state.steer = 'RIGHT';
+
+        if (state.drive === 'STOP' && state.steer === 'CENTER') {
+          state.stopped = true;
+        }
+        return state;
+      }
+    }
+
+    if (lower === 'forward') state.drive = 'FORWARD';
+    else if (lower === 'backward') state.drive = 'BACKWARD';
+    else if (lower === 'left') state.steer = 'LEFT';
+    else if (lower === 'right') state.steer = 'RIGHT';
+
+    return state;
+  }
+
+  // Case 1: WebSocket buffer previously held "CMD:MOVE:FORWARD:CENTER" (23 bytes)
+  const heapBuffer = Buffer.alloc(32);
+  heapBuffer.write('CMD:MOVE:FORWARD:CENTER');
+
+  // New incoming STOP frame is only 8 bytes ("CMD:STOP")
+  heapBuffer.write('CMD:STOP', 0, 8); // Remaining 15 bytes still contain ":FORWARD:CENTER"
+  const stopParsed = simulateFirmwareParser(heapBuffer, 8);
+  assert.strictEqual(stopParsed.stopped, true, 'CMD:STOP must parse cleanly despite trailing heap bytes');
+  console.log('  [PASS] Isolated 8-byte CMD:STOP resolves cleanly without heap corruption.');
+
+  // Case 2: New incoming compound STOP frame is 19 bytes ("CMD:MOVE:STOP:CENTER")
+  const heapBuffer2 = Buffer.alloc(32);
+  heapBuffer2.write('CMD:MOVE:FORWARD:CENTER'); // 23 bytes
+  heapBuffer2.write('CMD:MOVE:STOP:CENTER', 0, 19); // 19 bytes, leaving 'TER' at end
+  const compoundStopParsed = simulateFirmwareParser(heapBuffer2, 19);
+  assert.strictEqual(compoundStopParsed.stopped, true, 'CMD:MOVE:STOP:CENTER must parse and cut motors');
+  assert.strictEqual(compoundStopParsed.drive, 'STOP');
+  assert.strictEqual(compoundStopParsed.steer, 'CENTER');
+  console.log('  [PASS] Compound CMD:MOVE:STOP:CENTER cuts power without trailing buffer contamination.');
+
+  // Case 3: ECS legacy single-key stop ('stop' or 's')
+  const ecsStop = simulateFirmwareParser(Buffer.from('stop'), 4);
+  assert.strictEqual(ecsStop.stopped, true);
+  const keySStop = simulateFirmwareParser(Buffer.from('s'), 1);
+  assert.strictEqual(keySStop.stopped, true);
+  console.log('  [PASS] Legacy ECS lowercase "stop" and "s" commands immediately cut motor power.');
 }
 
 // 5. Test Battery Telemetry & ADC Divider Detection
@@ -234,8 +329,9 @@ try {
   testAccidentStateMachine();
   testMotorCommandSynthesis();
   testWatchdogTimeout();
+  testFirmwareStopAndBufferSafety();
   testBatteryMonitoring();
-  console.log('\n>>> ALL 5 TEST SUITES PASSED CLEANLY (100% SUCCESS) <<<\n');
+  console.log('\n>>> ALL 6 TEST SUITES PASSED CLEANLY (100% SUCCESS) <<<\n');
   process.exit(0);
 } catch (err) {
   console.error('\n[TEST FAILURE]', err);

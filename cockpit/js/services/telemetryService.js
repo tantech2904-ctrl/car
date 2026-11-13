@@ -25,6 +25,7 @@ export class TelemetryService {
     this.heartbeatTimer = null;
     this.reconnectTimer = null;
     this.httpPollTimer = null;
+    this.inFlightHttpCmdController = null;
 
     // Start background HTTP polling fallback
     this.startHttpPolling();
@@ -180,7 +181,35 @@ export class TelemetryService {
     }
   }
 
+  sendStop() {
+    if (this.isSimulated) {
+      this.processSimCommand('CMD:MOVE:STOP:CENTER');
+      return;
+    }
+
+    // 1. Abort any pending movement HTTP requests immediately
+    if (this.inFlightHttpCmdController) {
+      try { this.inFlightHttpCmdController.abort(); } catch (e) {}
+      this.inFlightHttpCmdController = null;
+    }
+
+    // 2. Deliver over WebSocket immediately (compound and legacy tokens)
+    if (this.isConnected && this.ws && this.ws.readyState === WebSocket.OPEN) {
+      try {
+        this.ws.send('CMD:MOVE:STOP:CENTER');
+        this.ws.send('CMD:STOP');
+      } catch (e) {}
+    } else {
+      // 3. Fallback to HTTP REST stop
+      this.sendHttpCommand('CMD:MOVE:STOP:CENTER');
+    }
+  }
+
   sendBurst(cmdString, count = 3, intervalMs = 25) {
+    if (cmdString.includes('STOP')) {
+      this.sendStop();
+      return;
+    }
     this.sendCommand(cmdString);
     if (count <= 1) return;
     let sent = 1;
@@ -246,12 +275,27 @@ export class TelemetryService {
       query += `&action=inv_steer`;
     }
 
+    // Abort previous pending movement HTTP fetch to prevent queue bloat
+    if (this.inFlightHttpCmdController) {
+      try { this.inFlightHttpCmdController.abort(); } catch (e) {}
+      this.inFlightHttpCmdController = null;
+    }
+
+    const controller = new AbortController();
+    this.inFlightHttpCmdController = controller;
+
     const directUrl = `http://${this.host}/cmd?${query}`;
     const proxyUrl = `/api/esp32/cmd?cmd=${ecsCmd}`;
 
-    fetch(directUrl, { method: 'GET', mode: 'no-cors' }).catch(() => {
-      fetch(proxyUrl, { method: 'GET' }).catch(() => {});
-    });
+    fetch(directUrl, { method: 'GET', mode: 'no-cors', signal: controller.signal })
+      .catch(() => {
+        fetch(proxyUrl, { method: 'GET', signal: controller.signal }).catch(() => {});
+      })
+      .finally(() => {
+        if (this.inFlightHttpCmdController === controller) {
+          this.inFlightHttpCmdController = null;
+        }
+      });
   }
 
   startHttpPolling() {

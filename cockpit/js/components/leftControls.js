@@ -275,6 +275,7 @@ export class LeftControls {
     element.addEventListener('pointerup', stop);
     element.addEventListener('pointerleave', stop);
     element.addEventListener('pointercancel', stop);
+    element.addEventListener('lostpointercapture', stop);
     element.addEventListener('contextmenu', (e) => e.preventDefault());
   }
 
@@ -375,6 +376,11 @@ export class LeftControls {
   setDriveAndSteer(drive, steer) {
     if (this.isEstopActive && drive !== 'STOP') return;
 
+    if (drive === 'STOP' && steer === 'CENTER') {
+      this.fullStop();
+      return;
+    }
+
     const stateChanged = (this.currentDrive !== drive || this.currentSteer !== steer);
     this.currentDrive = drive;
     this.currentSteer = steer;
@@ -386,23 +392,18 @@ export class LeftControls {
         this.motionStreamTimer = null;
       }
 
-      if (drive === 'STOP' && steer === 'CENTER') {
-        // Send 3x burst to guarantee stop delivery over Wi-Fi
-        this.telemetry.sendBurst('CMD:MOVE:STOP:CENTER', 3, 20);
-      } else {
-        const cmd = `CMD:MOVE:${drive === 'FORWARD' ? 'FWD' : drive === 'BACKWARD' ? 'REV' : 'STOP'}:${steer}`;
-        // Send immediate initial packet
-        this.telemetry.sendCommand(cmd);
-        // Stream continuous pulses every 75ms to satisfy 250ms hardware watchdog
-        this.motionStreamTimer = setInterval(() => {
-          if ((this.currentDrive !== 'STOP' || this.currentSteer !== 'CENTER') && !this.isEstopActive) {
-            this.telemetry.sendCommand(cmd);
-          } else {
-            clearInterval(this.motionStreamTimer);
-            this.motionStreamTimer = null;
-          }
-        }, 75);
-      }
+      const cmd = `CMD:MOVE:${drive === 'FORWARD' ? 'FWD' : drive === 'BACKWARD' ? 'REV' : 'STOP'}:${steer}`;
+      // Send immediate initial packet
+      this.telemetry.sendCommand(cmd);
+      // Stream continuous pulses every 140ms to satisfy 350ms hardware watchdog safely
+      this.motionStreamTimer = setInterval(() => {
+        if ((this.currentDrive !== 'STOP' || this.currentSteer !== 'CENTER') && !this.isEstopActive) {
+          this.telemetry.sendCommand(cmd);
+        } else {
+          clearInterval(this.motionStreamTimer);
+          this.motionStreamTimer = null;
+        }
+      }, 140);
     }
 
     this.updateReadouts();
@@ -418,7 +419,11 @@ export class LeftControls {
     }
     this.currentDrive = 'STOP';
     this.currentSteer = 'CENTER';
-    this.telemetry.sendBurst('CMD:MOVE:STOP:CENTER', 3, 20);
+    if (this.telemetry.sendStop) {
+      this.telemetry.sendStop();
+    } else {
+      this.telemetry.sendBurst('CMD:MOVE:STOP:CENTER', 3, 20);
+    }
     this.updateReadouts();
     this.updateDpadHighlights();
   }
